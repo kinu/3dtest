@@ -1,0 +1,324 @@
+<html>
+<head>
+  <title>Test page</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r123/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/handtrackjs/dist/handtrack.min.js"> </script>
+  <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/16.3.5/Tween.min.js"></script>-->
+<style>
+  #container { position: relative; }
+  #cameraContainer {
+    position: absolute;
+    width: 640;
+    pointer-events: none;
+    z-index: 6;
+  }
+  #leapcanvas {
+    position: absolute;
+    top: 0;
+    width: 640;
+    height: 360;
+    z-index: 10;
+  }
+  #predictionCanvas {
+    width: 640;
+    height: 360;
+  }
+  #video {
+    width: 640;
+  }
+  #predictionResult {
+    position: absolute;
+    font: 18pt Arial;
+    top: 400;
+    z-index: 10;
+  }
+</style>
+</head>
+<body>
+  <div id="container">
+    <div id="cameraContainer" class="camera">
+      <video id="video">Video stream not available.</video>
+      <canvas id="predictionCanvas"></canvas>
+    </div>
+    <div id="webglContainer">
+      <canvas id="leapcanvas"></canvas>
+    </div>
+    <div id="predictionResult">
+    </div>
+  </div>
+
+<script>
+  let width = 640    // We will scale the photo width to this
+  let height = 360   // This will be computed based on the input stream
+
+  let streaming = false
+  let video = null
+  let constrains = { video: true, audio: false }
+
+  // Z range will be roughly -z_range to z_range (i.e. -90 to 90),
+  // where 90 is the closest. (If it's 100 the object can't be shown)
+  const camera_z_position = 100;
+  const z_range = camera_z_position - 10;
+  const x_range = camera_z_position;
+  let y_range = x_range * (height / width);
+  let hand_width_average = -1;
+
+  // Motion
+  const ease = 0.25;
+  const f = 0.7;
+  let vx = 0, vy = 0, vz = 0;
+  let oldPosition = null;
+
+  // Cube rendering (super dirty)
+  var scene = null;
+  var cube = null;
+  var cube_shown = false;
+  var hand_shown = false;
+  var cube_inertia = false;
+  var pred_label = '';
+  var hand_geometry = [];
+
+  function clamp(v, max, min) {
+    if (v > max)
+      return max;
+    if (v < min)
+      return min;
+    return v;
+  }
+
+  function round(v, max, min) {
+    if (v < max && v > min)
+      return 0;
+    return v;
+  }
+
+  async function setupVideo() {
+    video = document.getElementById('video');
+
+    startVideoCapture(video);
+
+    video.addEventListener('canplay', function(ev){
+      if (!streaming) {
+        height = video.videoHeight / (video.videoWidth/width)
+        y_range = x_range * (height / width);
+
+        video.setAttribute('width', width)
+        video.setAttribute('height', height)
+        streaming = true
+      }
+    }, false)
+
+    return new Promise((resolve, reject) => {
+      video.onloadedmetadata = () => resolve();
+      video.onerror = () => reject();
+    });
+  }
+
+  function startVideoCapture(video) {
+    streaming = false
+    console.log(streaming)
+    navigator.mediaDevices.getUserMedia(constrains)
+    .then(function(stream) {
+      video.srcObject = stream
+      video.play()
+    })
+    .catch(function(err) {
+      console.log("An error occured! " + err)
+    })
+  }
+
+  // setupVideo();
+
+var predResult = document.getElementById('predictionResult');
+predResult.innerHTML = 'Loading prediction model...'
+
+var model = null;
+
+async function loadModel() {
+  let flipWebcam = false;
+  return new Promise((resolve, reject) => {
+    const modelParams = {
+      flipHorizontal: flipWebcam,
+      maxNumBoxes: 3,
+      iouThreshold: 0.5,
+      scoreThreshold: 0.8,
+      modelSize: "medium", /* small, medium, large */
+    }
+
+    handTrack.load(modelParams).then(mdl => {
+      model = mdl;
+      predResult.innerHTML = 'Loading prediction model... done!'
+      resolve();
+    }).catch(err => {
+      reject(error);
+    });
+  });
+}
+
+const canvas = document.getElementById("predictionCanvas");
+const ctx = canvas.getContext("2d");
+
+function startDetection() {
+  model.detect(video).then(predictions => {
+    // For debugging
+    // model.renderPredictions(predictions, canvas, ctx, video);
+
+    result = '';
+    let hand_closed = false;
+    let hand_found = false;
+    for (let i = 0; i < predictions.length; ++i) {
+      pred = predictions[i];
+      if (pred.label == 'face')
+        continue;
+      if (pred.label != 'face' && pred.label != 'closed' && !hand_found) {
+        hand_found = true;
+        hand_shown = true;
+        if (hand_width_average < 0) {
+          hand_width_average = pred.bbox[2];
+          if (hand_width_average > width / 5)
+            hand_width_average = width / 5;
+        }
+        hand_hidden_count = 0;
+        hand_label = pred.label;
+        hand_geometry = pred.bbox;
+      }
+      if (pred.label == 'closed') {
+        hand_closed = true;
+      }
+    }
+    cube_inertia = false;
+    if (!hand_found) {
+      if (hand_closed) {
+        // Only let it disapper when the hand is closed.
+        hand_shown = false;
+      } else {
+        cube_inertia = true;
+      }
+    }
+    predResult.innerHTML = result;
+
+    // Repeat this.
+    requestAnimationFrame(startDetection);
+  });
+}
+
+async function startHandTrack() {
+  Promise.all([setupVideo(), loadModel()]).then(() => {
+    predResult.innerHTML = 'Start prediction!';
+    startDetection();
+  });
+}
+
+startHandTrack();
+
+// Three.js
+// https://qiita.com/yo_chan_yo_chan/items/11361f373c389a3f8c6d
+{
+  function createCube(width, height, depth) {
+    let geometry = new THREE.BoxGeometry(width, height, depth);
+    //let material = new THREE.MeshNormalMaterial();
+    let material = new THREE.MeshLambertMaterial({color: 0x4CA3D9});
+    let cube = new THREE.Mesh(geometry, material);
+
+    // Rough view-port range:
+    // x { -x_range to x_range }
+    // y { -x_range to y_range }
+    // z { -z_range (far) to z_range (close) }
+    // cube.position.set(0, 0, 0);  // --> center
+
+    return cube;
+  }
+
+  scene = new THREE.Scene();
+
+  // angle of the field of view = 30
+  // aspect = width / height
+  // where the camera starts = 1
+  // where the camera ends = 1000
+  let camera = new THREE.PerspectiveCamera(30, width / height, 1, 1000);
+  camera.position.z = camera_z_position;
+
+  // Add lights.
+  const dirLight = new THREE.DirectionalLight(0xFFFFFF, 0.5)
+  dirLight.position.set(1, 20, 20)
+  const ambLight = new THREE.AmbientLight(0x4CC3D9);
+  scene.add(dirLight, ambLight)
+
+  function createRenderer(width, height) {
+    let canvaselem = document.getElementById('leapcanvas');
+    let renderer = new THREE.WebGLRenderer({
+      alpha: true,
+      antialias: true,
+      canvas: canvaselem
+    });
+    renderer.setSize(width, height);
+    document.body.appendChild(renderer.domElement);
+    return renderer;
+  }
+
+  let renderer = createRenderer(width, height);
+  const side = Math.min(width, height) / 40;
+  cube = createCube(side, side, side / 2);
+
+  // Render it! (TODO: combine this with the other rAF)
+  function update() {
+    let just_appeared = false;
+    let just_disappeared = false;
+
+    if (hand_shown && !cube_shown) {
+      cube_shown = true;
+      just_appeared = true;
+      scene.add(cube);
+    } else if (!hand_shown && cube_shown) {
+      cube_shown = false;
+      scene.remove(cube);
+    }
+
+    cube.rotation.x += 0.01;
+    cube.rotation.y += 0.01;
+
+    const hand_x_center = hand_geometry[0] + hand_geometry[2] / 2;
+    const hand_y_center = hand_geometry[1] + hand_geometry[3] / 2;
+    let x = hand_x_center * x_range / width - (x_range / 2);
+    let y = -hand_y_center * y_range / height + (y_range / 2);
+    let z = (hand_geometry[2] - hand_width_average) * 0.8;
+
+    // Adjust x and y according to z.
+    const z_center = z_range;
+    let z_abs = -(z - z_center);
+    x = x * z_abs / z_center;
+    y = y * z_abs / z_center;
+
+    // Adjust motion.
+    if (just_appeared) {
+      vx = vy = vz = 0;
+
+      cube.position.x = x;
+      cube.position.y = y;
+      cube.position.z = z;
+    } else if (cube_inertia) {
+      cube.position.x += vx;
+      cube.position.y += vy;
+      cube.position.z += vz;
+    } else {
+      vx += round(x - cube.position.x, 5, -5) * ease;
+      vy += round(y - cube.position.y, 5, -5) * ease;
+      vz += round(z - cube.position.z, 5, -5) * ease;
+      vx *= f;
+      vy *= f;
+      vz *= f;
+
+      cube.position.x += vx;
+      cube.position.y += vy;
+      cube.position.z += vz;
+    }
+
+    requestAnimationFrame(update);
+    renderer.render(scene, camera);
+  }
+  update();
+}
+</script>
+</body>
+</html>
+

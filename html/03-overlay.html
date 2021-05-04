@@ -1,0 +1,193 @@
+<html>
+<head>
+  <title>Test page</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r123/three.min.js"></script>
+<style>
+  #container { position: relative; }
+  #cameraContainer {
+    position: absolute;
+    width: 640;
+    pointer-events: none;
+    z-index: 6;
+  }
+  #leapcanvas {
+    position: absolute;
+    top: 0;
+    width: 640;
+    height: 360;
+    z-index: 10;
+  }
+  #recorder {
+    position: absolute;
+    top: 400;
+    z-index: 10;
+  }
+</style>
+</head>
+<body>
+  <div>
+    <button id="startbutton">Start</button>
+    <button id="stopbutton">Stop</button>
+    <button id="download">Download</button>
+  </div>
+
+  <div id="container">
+    <div id="cameraContainer" class="camera">
+      <video id = "video">Video stream not available.</video>
+    </div>
+    <div id="webglContainer">
+      <canvas id="leapcanvas"></canvas>
+    </div>
+    <div id="recorder">
+      <video id="test"></video>
+    </div>
+  </div>
+
+<script>
+{
+  let width = 640    // We will scale the photo width to this
+  let height = 0     // This will be computed based on the input stream
+
+  let streaming = false
+
+  let video = null
+  let startbutton = null
+  let constrains = { video: true, audio: true }
+  let recorder = null
+  let record_data = []
+
+  function startup() {
+    video = document.getElementById('video')
+    startbutton = document.getElementById('startbutton')
+    stopbutton  = document.getElementById('stopbutton')
+    downloadbutton = document.getElementById('download')
+
+    videoStart()
+
+    video.addEventListener('canplay', function(ev){
+      if (!streaming) {
+        height = video.videoHeight / (video.videoWidth/width)
+
+        video.setAttribute('width', width)
+        video.setAttribute('height', height)
+        streaming = true
+      }
+    }, false)
+
+    startRecorder()
+
+    startbutton.addEventListener('click', function(ev){
+      recorder.start()
+      ev.preventDefault()
+    }, false);
+
+    stopbutton.addEventListener('click', function(ev) {
+      recorder.stop()
+    })
+
+    downloadbutton.addEventListener('click', function(ev) {
+      console.log(record_data)
+      var blob = new Blob(record_data, { type: 'video/webm' })
+      var url = window.URL.createObjectURL(blob)
+      var a = document.createElement('a')
+      document.body.appendChild(a)
+      a.style = 'display:none'
+      a.href = url;
+      a.download = 'test.webm'
+      a.click()
+      window.URL.revokeObjectURL(url)
+    })
+  }
+
+  function videoStart() {
+    streaming = false
+    console.log(streaming)
+    navigator.mediaDevices.getUserMedia(constrains)
+    .then(function(stream) {
+      video.srcObject = stream
+      video.play()
+    })
+    .catch(function(err) {
+      console.log("An error occured! " + err)
+    })
+  }
+
+  function startRecorder() {
+    navigator.mediaDevices.getUserMedia(constrains)
+    .then(function (stream) {
+      recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = function (e) {
+        var testvideo = document.getElementById('test')
+        testvideo.setAttribute('controls', '')
+        testvideo.setAttribute('width', width)
+        testvideo.setAttribute('height', height)
+        var outputdata = window.URL.createObjectURL(e.data)
+        record_data.push(e.data)
+        testvideo.src = outputdata
+      }
+    })
+  }
+
+  startup();
+}
+</script>
+<script>
+{
+  function createCube(width, height, depth) {
+    let geometry = new THREE.BoxGeometry(width, height, depth);
+    //let material = new THREE.MeshNormalMaterial();
+    //let material = new THREE.MeshLambertMaterial({color: 0x4CA3D9});
+    let material = new THREE.MeshPhongMaterial({color: 0x4CA3D9});
+    let cube = new THREE.Mesh(geometry, material);
+    return cube;
+  }
+
+  // Display size.
+  /*
+  let width = window.innerWidth;
+  let height = window.innerHeight;
+  */
+  let width = 640;
+  let height = 360;
+
+  let scene = new THREE.Scene();
+
+  let camera = new THREE.PerspectiveCamera(30, width / height, 1, 1000);
+  camera.position.z = 100;
+
+  // Cube. (See above)
+  let side = Math.min(width, height) / 50;
+  let cube = createCube(side, side, side);
+
+  scene.add(cube);
+
+  // Add lights.
+  const dirLight = new THREE.DirectionalLight(0xFFFFFF, 0.5)
+  dirLight.position.set(1, 20, 20)
+  const ambLight = new THREE.AmbientLight(0x4CC3D9);
+  scene.add(dirLight, ambLight)
+
+  function createRenderer(width, height) {
+    let canvaselem = document.getElementById('leapcanvas');
+    let renderer = new THREE.WebGLRenderer({
+      alpha: true,
+      antialias: true,
+      canvas: canvaselem
+    });
+    renderer.setSize(width, height);
+    document.body.appendChild(renderer.domElement);
+    return renderer;
+  }
+
+  let renderer = createRenderer(width, height);
+  function update() {
+    cube.rotation.x += 0.01;
+    cube.rotation.y += 0.01;
+    requestAnimationFrame(update);
+    renderer.render(scene, camera);
+  }
+  update();
+}
+</script>
+</body>
+</html>

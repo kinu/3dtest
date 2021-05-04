@@ -260,7 +260,10 @@ function createText(sz, text) {
 
 scene = new THREE.Scene();
 
-// 視野角=30, 縦横比, 撮影開始距離, 撮影終了距離
+// angle of the field of view = 30
+// aspect = width / height
+// where the camera starts = 1
+// where the camera ends = 1000
 let camera = new THREE.PerspectiveCamera(30, width / height, 1, 1000);
 camera.position.z = camera_z_position;
 
@@ -286,7 +289,7 @@ let renderer = createRenderer(width, height);
 const side = Math.min(width, height) / 40;
 //overlay_obj = createCube(side, side, side / 2);
 //overlay_obj = createSphere(side);
-createText(4, 'BlinkOn');
+createText(4, 'Test!!');
 
 // Render it! (TODO: combine this with the other rAF)
 function update() {

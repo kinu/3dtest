@@ -1,0 +1,107 @@
+<html>
+<head>
+  <title>WebXR Test</title>
+  <style>
+  #arbutton { font-size: 24px; padding: 6px; }
+  #message { font-family: sans-serif; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <button type="button" id="arbutton">Start AR</button>
+  <canvas id="xrcanvas"></canvas>
+  <div id="message"></div>
+<script type="module">
+import * as THREE from 'https://unpkg.com/three/build/three.module.js';
+
+const width = window.innerWidth;
+const height = window.innerHeight;
+const arButton = document.getElementById('arbutton');
+const xrCanvas = document.getElementById('xrcanvas');
+const messageBox = document.getElementById('message');
+
+(async () => {
+
+const isArSupported = navigator.xr &&
+    await navigator.xr.isSessionSupported('immersive-ar');
+arButton.enabled = isArSupported;
+if (!isArSupported) {
+  messageBox.innerHTML = 'AR not available';
+}
+
+arButton.onclick = async () => {
+  arButton.style.display = 'none';
+
+  // https://developers.google.com/ar/develop/webxr/hello-webxr
+  const xrSession = await navigator.xr.requestSession('immersive-ar');
+  const gl = xrCanvas.getContext("webgl", {xrCompatible: true});
+
+  // WebGLRenderer for the XR Session's base layer.
+  const renderer = new THREE.WebGLRenderer({
+     canvas: xrCanvas,
+     context: gl,
+     preserveDrawingBuffer: true,
+     alpha: true });
+  renderer.autoClear = false;
+  renderer.setSize(width, height);
+  renderer.xr.enabled = true;
+
+  const scene = new THREE.Scene();
+
+  // The API directly updates the camera matrices.
+  // Disable matrix auto updates so three.js doesn't attempt
+  // to handle the matrices independently.
+  const camera = new THREE.PerspectiveCamera();
+  camera.matrixAutoUpdate = false;
+
+  // Test 3D object
+  // Geometry 1 = 1m
+  const cube = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(0.1, 0.1, 0.1),
+    new THREE.MeshNormalMaterial());
+  cube.position.set(1, 1, 1);
+  scene.add(cube);
+
+  // https://web.dev/web-ar/
+  // Base layer will be what the scene captured from the camera is rendered.
+  xrSession.updateRenderState({
+    baseLayer: new XRWebGLLayer(xrSession, gl)
+  });
+  // 'local' - the origin is at the viewer's position at the time of
+  // session creation.
+  const referenceSpace = await xrSession.requestReferenceSpace('local');
+  xrSession.requestAnimationFrame(onXRFrame);
+
+  function onXRFrame(hrTime, xrFrame) {
+    // xrFrame.session == xrSession
+    // Repeatedly call onXRFrame.
+    xrSession.requestAnimationFrame(onXRFrame);
+
+    // Copy the base layer (from the camera) to the GL's frame buffer.
+    const glLayer = xrSession.renderState.baseLayer;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, glLayer.framebuffer);
+
+    const pose = xrFrame.getViewerPose(referenceSpace);
+    if (!pose)
+      return;
+
+    // views.length will be 0 or 1 (or 2 if the device has two views
+    // for left/right eyes).
+    pose.views.forEach((view) => {
+      const viewport = glLayer.getViewport(view);
+      renderer.setSize(viewport.width, viewport.height);
+
+      camera.matrix.fromArray(view.transform.matrix);
+      camera.projectionMatrix.fromArray(view.projectionMatrix);
+      camera.updateMatrixWorld(true);
+
+      renderer.render(scene, camera);
+    });
+  }
+};
+
+})();
+
+</script>
+</body>
+</html>
+

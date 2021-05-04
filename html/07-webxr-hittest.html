@@ -1,17 +1,26 @@
 <html>
 <head>
   <title>WebXR Test</title>
-  <style>
-  #arbutton { font-size: 24px; padding: 6px; }
-  #message { font-family: sans-serif; margin-top: 4px; }
-  </style>
+<style>
+#arbutton { font-size: 24px; padding: 6px; }
+#message { font-family: sans-serif; margin-top: 4px; }
+</style>
+  <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
   <button type="button" id="arbutton">Start AR</button>
   <canvas id="xrcanvas"></canvas>
   <div id="message"></div>
 <script type="module">
-import * as THREE from 'https://unpkg.com/three@128.0/build/three.module.js';
+// References:
+// https://developers.google.com/ar/develop/webxr/hello-webxr
+// https://web.dev/web-ar/
+// https://github.com/immersive-web/webxr-samples/blob/main/hit-test.html
+
+  
+// import * as THREE from 'https://unpkg.com/three@0.128.0/build/three.module.js';
+// import { GLTFLoader } from 'https://unpkg.com/three@0.128.0/examples/jsm/loaders/GLTFLoader';
 
 const width = window.innerWidth;
 const height = window.innerHeight;
@@ -31,8 +40,9 @@ if (!isArSupported) {
 arButton.onclick = async () => {
   arButton.style.display = 'none';
 
-  // https://developers.google.com/ar/develop/webxr/hello-webxr
-  const xrSession = await navigator.xr.requestSession('immersive-ar');
+  const xrSession = await navigator.xr.requestSession(
+    'immersive-ar',
+    {requiredFeatures: ['hit-test']});
   const gl = xrCanvas.getContext("webgl", {xrCompatible: true});
 
   // WebGLRenderer for the XR Session's base layer.
@@ -53,15 +63,12 @@ arButton.onclick = async () => {
   const camera = new THREE.PerspectiveCamera();
   camera.matrixAutoUpdate = false;
 
-  // Test 3D object
+  // Test 3D object (don't add it to the scene yet)
   // Geometry 1 = 1m
   const cube = new THREE.Mesh(
     new THREE.BoxBufferGeometry(0.15, 0.15, 0.15),
     new THREE.MeshNormalMaterial());
-  cube.position.set(0, 0, -0.2);
-  scene.add(cube);
 
-  // https://web.dev/web-ar/
   // Base layer will be what the scene captured from the camera is rendered.
   xrSession.updateRenderState({
     baseLayer: new XRWebGLLayer(xrSession, gl)
@@ -70,6 +77,32 @@ arButton.onclick = async () => {
   // session creation.
   const referenceSpace = await xrSession.requestReferenceSpace('local');
   xrSession.requestAnimationFrame(onXRFrame);
+
+  // Create another XRReferenceSpace that has the viewer as the origin
+  // for hit-testing.
+  const viewerSpace = await xrSession.requestReferenceSpace('viewer');
+  const hitTestSource = await xrSession.requestHitTestSource(
+  { space: viewerSpace });
+
+  const reticle = await (async () => {
+    const loader = new THREE.GLTFLoader();
+    return new Promise((resolve, reject) => {
+      loader.load("https://immersive-web.github.io/webxr-samples/media/gltf/reticle/reticle.gltf", function(gltf) {
+        let reticle = gltf.scene;
+        reticle.visible = false;
+        scene.add(reticle);
+        resolve(reticle);
+      });
+    });
+  })();
+
+  // Add a cube when tapped.
+  xrSession.onselect = (event) => {
+    const c = cube.clone();
+    c.position.copy(reticle.position);
+    c.position.y += 0.15/2;
+    scene.add(c);
+  };
 
   function onXRFrame(hrTime, xrFrame) {
     // xrFrame.session == xrSession
@@ -88,11 +121,23 @@ arButton.onclick = async () => {
     // for left/right eyes).
     pose.views.forEach((view) => {
       const viewport = glLayer.getViewport(view);
-      renderer.setSize(viewport.width, viewport.height);
 
+      // Adjust the camera for the local view.
+      renderer.setSize(viewport.width, viewport.height);
       camera.matrix.fromArray(view.transform.matrix);
       camera.projectionMatrix.fromArray(view.projectionMatrix);
       camera.updateMatrixWorld(true);
+
+      // Hit test results.
+      const hitTestResults = xrFrame.getHitTestResults(hitTestSource);
+      if (hitTestResults.length > 0 && reticle) {
+        const hitPose = hitTestResults[0].getPose(referenceSpace);
+        reticle.visible = true;
+        reticle.position.set(hitPose.transform.position.x,
+                             hitPose.transform.position.y,
+                             hitPose.transform.position.z);
+        reticle.updateMatrixWorld(true);
+      }
 
       renderer.render(scene, camera);
     });

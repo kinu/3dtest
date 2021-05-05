@@ -293,46 +293,22 @@ const side = Math.min(width, height) / 40;
 //overlay_obj = createSphere(side);
 //createText(4, 'Test!!');
 
-const loader = new THREE.GLTFLoader();
-loader.load("images/text_simple3.glb", function(gltf) {
-  overlay_obj = gltf.scene;
-  overlay_obj.scale.set(6, 6, 6);
-  overlay_obj.castShadow = true;
-  overlay_obj.receiveShadow = true;
-  scene.add(overlay_obj);
-});
-
-import Cylinder from './cylinder.js';
-const cylinder = new Cylinder(10, 10, 8, 0xffcea0);
-
-let t = 0;
+import Logo from './logo.js';
+const logo = new Logo(10);
 
 // Render it! (TODO: combine this with the other rAF)
 function update() {
-  t++;
   let just_appeared = false;
   let just_disappeared = false;
-
-  if (!overlay_obj) {
-    requestAnimationFrame(update);
-    return;
-  }
 
   if (hand_shown && !object_shown) {
     object_shown = true;
     just_appeared = true;
-    scene.add(overlay_obj);
-    scene.add(cylinder);
+    scene.add(logo);
   } else if (!hand_shown && object_shown) {
     object_shown = false;
-    scene.remove(overlay_obj);
-    scene.remove(cylinder);
+    scene.remove(logo);
   }
-
-  // overlay_obj.rotation.x += 0.01;
-  overlay_obj.quaternion.copy(camera.quaternion);
-  overlay_obj.rotation.z = Math.sin(t/30) / 3;
-  overlay_obj.rotation.y = Math.cos(t/60) / 3;
 
   const hand_x_center = hand_geometry[0] + hand_geometry[2] / 2;
   const hand_y_center = hand_geometry[1] + hand_geometry[3] / 2;
@@ -346,7 +322,7 @@ function update() {
   x = x * z_abs / z_center;
   y = y * z_abs / z_center;
 
-  let pos = overlay_obj.position;
+  let pos = logo.position;
 
   // Adjust motion.
   if (just_appeared) {
@@ -360,9 +336,9 @@ function update() {
     pos.y += vy;
     pos.z += vz;
   } else {
-    vx += round(x - overlay_obj.position.x, 5, -5) * ease;
-    vy += round(y - overlay_obj.position.y, 5, -5) * ease;
-    vz += round(z - overlay_obj.position.z, 5, -5) * ease;
+    vx += round(x - logo.position.x, 5, -5) * ease;
+    vy += round(y - logo.position.y, 5, -5) * ease;
+    vz += round(z - logo.position.z, 5, -5) * ease;
     vx *= f;
     vy *= f;
     vz *= f;
@@ -371,10 +347,9 @@ function update() {
     pos.y += vy;
     pos.z += vz;
   }
-  overlay_obj.position.copy(pos);
 
-  cylinder.position.copy(pos);
-  cylinder.update();
+  logo.position.copy(pos);
+  logo.update(camera);
 
   requestAnimationFrame(update);
   renderer.render(scene, camera);

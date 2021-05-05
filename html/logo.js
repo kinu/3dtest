@@ -1,4 +1,4 @@
-import Cylinder from './cylinder.js';
+// import Cylinder from './cylinder.js';
 import GlowSphere from './glowsphere.js';
 
 export default class Logo extends THREE.Object3D {
@@ -16,12 +16,21 @@ export default class Logo extends THREE.Object3D {
     this.ts = 0;
 
     this.loader = new THREE.GLTFLoader();
-    this.loader.load("images/text_simple.glb", (gltf) => {
-      this.text = gltf.scene;
-      this.text.scale.set(6, 6, 6);
-      this.add(this.text);
-      // console.log('added!', this.text);
+    this.loaderPromise = new Promise((resolve, reject) => {
+      this.loader.load("images/text_simple.glb", (gltf) => {
+        let scale = radius * 0.5;
+        this.text = gltf.scene;
+        this.text.rotation.y = 90;
+        this.text.scale.set(scale, scale, scale);
+        this.add(this.text);
+        // console.log('added!', this.text);
+        resolve(this);
+      });
     });
+  }
+
+  async setup() {
+    return this.loaderPromise;
   }
 
   update(camera) {

@@ -1,0 +1,168 @@
+<html>
+<head>
+  <title>WebXR Test</title>
+<style>
+#arbutton { font-size: 24px; padding: 6px; }
+#message { font-family: sans-serif; margin-top: 4px; }
+</style>
+  <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+<body>
+  <button type="button" id="arbutton">Enter AR</button>
+  <canvas id="xrcanvas"></canvas>
+  <div id="message"></div>
+<script type="module">
+// References:
+// https://developers.google.com/ar/develop/webxr/hello-webxr
+// https://web.dev/web-ar/
+// https://github.com/immersive-web/webxr-samples/blob/main/hit-test.html
+
+import Logo from './logo-ar.js';
+
+const width = window.innerWidth;
+const height = window.innerHeight;
+const arButton = document.getElementById('arbutton');
+const xrCanvas = document.getElementById('xrcanvas');
+const messageBox = document.getElementById('message');
+
+(async () => {
+
+const isArSupported = navigator.xr &&
+    await navigator.xr.isSessionSupported('immersive-ar');
+arButton.enabled = isArSupported;
+if (!isArSupported) {
+  messageBox.innerHTML = 'AR not available';
+}
+
+arButton.onclick = async () => {
+  arButton.style.display = 'none';
+
+  const xrSession = await navigator.xr.requestSession(
+    'immersive-ar',
+    {requiredFeatures: ['hit-test']});
+  const gl = xrCanvas.getContext("webgl", {xrCompatible: true});
+
+  // WebGLRenderer for the XR Session's base layer.
+  const renderer = new THREE.WebGLRenderer({
+     canvas: xrCanvas,
+     context: gl,
+     preserveDrawingBuffer: true,
+     alpha: true });
+  renderer.outputEncoding = THREE.GammaEncoding;
+  // This doesn't work
+  // renderer.shadowMap.enabled = true;
+  renderer.autoClear = false;
+  renderer.setSize(width, height);
+  renderer.xr.enabled = true;
+
+  const scene = new THREE.Scene();
+
+  THREE.Cache.enabled = true;
+
+  // The API directly updates the camera matrices.
+  // Disable matrix auto updates so three.js doesn't attempt
+  // to handle the matrices independently.
+  const camera = new THREE.PerspectiveCamera();
+  camera.matrixAutoUpdate = false;
+
+  // Test 3D object (don't add it to the scene yet)
+  // Geometry 1 = 1m
+  const cube = new THREE.Mesh(
+    new THREE.BoxBufferGeometry(0.15, 0.15, 0.15),
+    new THREE.MeshNormalMaterial());
+
+  // Base layer will be what the scene captured from the camera is rendered.
+  xrSession.updateRenderState({
+    baseLayer: new XRWebGLLayer(xrSession, gl)
+  });
+  // 'local' - the origin is at the viewer's position at the time of
+  // session creation.
+  const referenceSpace = await xrSession.requestReferenceSpace('local');
+  xrSession.requestAnimationFrame(onXRFrame);
+
+  // Create another XRReferenceSpace that has the viewer as the origin
+  // for hit-testing.
+  const viewerSpace = await xrSession.requestReferenceSpace('viewer');
+  const hitTestSource = await xrSession.requestHitTestSource(
+  { space: viewerSpace });
+
+  const reticle = await (async () => {
+    const loader = new THREE.GLTFLoader();
+    return new Promise((resolve, reject) => {
+      loader.load("https://immersive-web.github.io/webxr-samples/media/gltf/reticle/reticle.gltf", function(gltf) {
+        let reticle = gltf.scene;
+        reticle.visible = false;
+        scene.add(reticle);
+        resolve(reticle);
+      });
+    });
+  })();
+
+  // Add lights.
+  const dirLight = new THREE.DirectionalLight(0xFFFFFF, 0.5)
+  dirLight.position.set(1, 20, 20)
+  dirLight.castShadow = true;
+  const ambLight = new THREE.AmbientLight(0xffdace);
+  scene.add(dirLight, ambLight);
+
+  var logos = [];
+
+  // Add a cube when tapped.
+  xrSession.onselect = (event) => {
+    // const c = cube.clone();
+    const c = new Logo(0.15);
+    c.position.copy(reticle.position);
+    // c.position.y += 0.15/2;
+    scene.add(c);
+    logos.push(c);
+  };
+
+  function onXRFrame(hrTime, xrFrame) {
+    // xrFrame.session == xrSession
+    // Repeatedly call onXRFrame.
+    xrSession.requestAnimationFrame(onXRFrame);
+
+    // Copy the base layer (from the camera) to the GL's frame buffer.
+    const glLayer = xrSession.renderState.baseLayer;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, glLayer.framebuffer);
+
+    const pose = xrFrame.getViewerPose(referenceSpace);
+    if (!pose)
+      return;
+
+    // views.length will be 0 or 1 (or 2 if the device has two views
+    // for left/right eyes).
+    pose.views.forEach((view) => {
+      const viewport = glLayer.getViewport(view);
+
+      // Adjust the camera for the local view.
+      renderer.setSize(viewport.width, viewport.height);
+      camera.matrix.fromArray(view.transform.matrix);
+      camera.projectionMatrix.fromArray(view.projectionMatrix);
+      camera.updateMatrixWorld(true);
+
+      // Hit test results.
+      const hitTestResults = xrFrame.getHitTestResults(hitTestSource);
+      if (hitTestResults.length > 0 && reticle) {
+        const hitPose = hitTestResults[0].getPose(referenceSpace);
+        reticle.visible = true;
+        reticle.position.set(hitPose.transform.position.x,
+                             hitPose.transform.position.y,
+                             hitPose.transform.position.z);
+        reticle.updateMatrixWorld(true);
+      }
+
+      logos.forEach(logo => logo.update());
+
+      renderer.render(scene, camera);
+    });
+  }
+};
+
+})();
+
+</script>
+</body>
+</html>
+

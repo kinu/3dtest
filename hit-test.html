@@ -77,7 +77,7 @@ let arObjs = [];
       vec3.set(flower.scale, 0.8, 0.8, 0.8);
       arObject.addNode(flower);
 
-      let text = new Gltf2Node({url: 'https://cdn.glitch.com/c49fe634-0a1b-4efb-b5c3-47d73a33356d%2Ftext_11.glb?v=1620229796025'});
+      let text = new Gltf2Node({url: 'media/gltf/text_11.glb'});
       vec3.set(text.scale, 0.8, 0.8, 0.8);
       arObject.addNode(text);
       
@@ -96,7 +96,7 @@ let arObjs = [];
       vec3.set(flower2.scale, 0.8, 0.8, 0.8);
       arObject2.addNode(flower2);
 
-      let text2 = new Gltf2Node({url: 'https://cdn.glitch.com/c49fe634-0a1b-4efb-b5c3-47d73a33356d%2Ftext_13.glb?v=1620230459393'});
+      let text2 = new Gltf2Node({url: 'media/gltf/text_13.glb'});
       vec3.set(text2.scale, 0.8, 0.8, 0.8);
       arObject2.addNode(text2);
       
@@ -115,7 +115,7 @@ let arObjs = [];
       vec3.set(flower3.scale, 0.8, 0.8, 0.8);
       arObject3.addNode(flower3);
 
-      let text3 = new Gltf2Node({url: 'https://cdn.glitch.com/c49fe634-0a1b-4efb-b5c3-47d73a33356d%2Ftext_14.glb?v=1620229804108'});
+      let text3 = new Gltf2Node({url: 'media/gltf/text_14.glb'});
       vec3.set(text3.scale, 0.8, 0.8, 0.8);
       arObject3.addNode(text3);
       
@@ -227,6 +227,8 @@ arObjs.push(arObject3);
         }
       }
 
+      let zoomInArObject3 = false;
+
       let rayOrigin = vec3.create();
       let rayDirection = vec3.create();
       function onSelect(event) {
@@ -235,6 +237,8 @@ arObjs.push(arObject3);
           // so we can just use it's matrix to save an unnecessary call to 
           // event.frame.getHitTestResults.
           addARObjectAt(reticle.matrix);
+        } else if (flowers.length >= MAX_FLOWERS && !zoomInArObject3) {
+          zoomInArObject3 = true;
         }
       }
 
@@ -244,6 +248,15 @@ arObjs.push(arObject3);
         let pose = frame.getViewerPose(xrRefSpace);
 
         if (reticle) reticle.visible = false;
+
+        if (zoomInArObject3) {
+          arObject3Scale += 0.02;
+          scene.removeNode(arObject3);
+          arObject3.removeNode(text3);
+          vec3.set(text3.scale, arObject3Scale, arObject3Scale, arObject3Scale);
+          arObject3.addNode(text3);
+          scene.addNode(arObject3);
+        }
 
         // If we have a hit test source, get its results for the frame
         // and use the pose to display a reticle in the scene.

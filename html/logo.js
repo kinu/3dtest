@@ -1,10 +1,18 @@
 import Cylinder from './cylinder.js';
+import GlowSphere from './glowsphere.js';
 
 export default class Logo extends THREE.Object3D {
-  constructor(radius) {
+  constructor(radius, camera) {
     super();
+
+    /*
     this.cylinder = new Cylinder(radius, radius * 0.7, radius * 0.8, 0xffcea0);
     this.add(this.cylinder);
+    */
+
+    this.sphere = new GlowSphere(camera, radius);
+    this.add(this.sphere);
+
     this.ts = 0;
 
     this.loader = new THREE.GLTFLoader();
@@ -25,6 +33,7 @@ export default class Logo extends THREE.Object3D {
       this.text.rotation.y = Math.cos(this.ts/60) / 3;
     }
 
-    this.cylinder.update();
+    if (this.cylinder)
+      this.cylinder.update();
   }
 };

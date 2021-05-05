@@ -2,6 +2,7 @@
 <head>
   <title>Test page</title>
   <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
 <script>
@@ -24,9 +25,16 @@
   camera.position.z = 100;
 
 
-  var side = Math.min(width, height) / 60;
-  var cube = createCube(side, side, side);
-  scene.add(cube);
+  // Text.
+  const loader = new THREE.GLTFLoader();
+  let text;
+  loader.load("images/text_simple.glb", function(gltf) {
+    text = gltf.scene;
+    text.scale.set(10, 10, 10);
+    text.position.set(0, 0, 0);
+    scene.add(text);
+    console.log('adding 3d text... ');
+  });
 
   // Add lights.
   const dirLight = new THREE.DirectionalLight(0xFFFFFF, 0.5)
@@ -44,9 +52,12 @@
     return renderer;
   }(width, height);
 
+  //... or render it every time differently.
   function update() {
-    cube.rotation.x += 0.01;
-    cube.rotation.y += 0.01;
+    if (text) {
+      // text.rotation.x += 0.01;
+      text.rotation.y += 0.01;
+    }
     requestAnimationFrame(update);
     renderer.render(scene, camera);
   }

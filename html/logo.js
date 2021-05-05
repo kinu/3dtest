@@ -16,7 +16,7 @@ export default class Logo extends THREE.Object3D {
     this.ts = 0;
 
     this.loader = new THREE.GLTFLoader();
-    this.loader.load("images/text_simple3.glb", (gltf) => {
+    this.loader.load("images/text_simple.glb", (gltf) => {
       this.text = gltf.scene;
       this.text.scale.set(6, 6, 6);
       this.add(this.text);

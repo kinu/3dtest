@@ -3,6 +3,7 @@
   <title>Test page</title>
   <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
   <script src="https://unpkg.com/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
 <script>
@@ -28,12 +29,22 @@
   // Text.
   const loader = new THREE.GLTFLoader();
   let text;
-  loader.load("images/text_simple.glb", function(gltf) {
+  loader.load("images/text_simple3.glb", function(gltf) {
     text = gltf.scene;
-    text.scale.set(10, 10, 10);
+    text.scale.set(5, 5, 5);
     text.position.set(0, 0, 0);
     scene.add(text);
-    console.log('adding 3d text... ');
+    console.log('adding 3d text... ', text);
+  });
+
+  let reticle;
+  loader.load("https://immersive-web.github.io/webxr-samples/media/gltf/reticle/reticle.gltf", function(gltf) {
+    reticle = gltf.scene;
+    reticle.scale.set(20, 20, 20);
+    reticle.position.set(0, 0, 0);
+    reticle.visible = true;
+    scene.add(reticle);
+    console.log('adding reticle... ', reticle);
   });
 
   // Add lights.
@@ -42,24 +53,37 @@
   const ambLight = new THREE.AmbientLight(0x4CC3D9);
   scene.add(dirLight, ambLight)
 
-  var renderer = function (width, height) {
-    var renderer = new THREE.WebGLRenderer({
-      alpha: true,
-      antialias: true
-    });
-    renderer.setSize(width, height);
-    document.body.appendChild(renderer.domElement);
-    return renderer;
-  }(width, height);
+  let t = 0;
 
-  //... or render it every time differently.
+  // Create the renderer.
+  var renderer = new THREE.WebGLRenderer({
+    alpha: true,
+    antialias: true
+  });
+  renderer.setSize(width, height);
+  renderer.outputEncoding = THREE.GammaEncoding;
+  document.body.appendChild(renderer.domElement);
+
+  // Add orbit control (therefore camera can be controlled by the mouse).
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.autoRotate = true;
+  controls.autoRotateSpeed = 1.0;
+
   function update() {
+    t++;
     if (text) {
-      // text.rotation.x += 0.01;
-      text.rotation.y += 0.01;
+      // Always point to the camera, but also with some rotation.
+      text.quaternion.copy(camera.quaternion);
+      text.rotation.z = Math.sin(t/30) / 3;
+      text.rotation.y = Math.cos(t/60) / 3;
     }
-    requestAnimationFrame(update);
+    if (reticle) {
+      reticle.rotation.x += 0.1;
+      reticle.rotation.y += 0.1;
+    }
     renderer.render(scene, camera);
+    // controls.update();
+    requestAnimationFrame(update);
   }
   update();
 
